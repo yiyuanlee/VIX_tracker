@@ -1,0 +1,30 @@
+name: VIX Weekly Monitor
+
+on:
+  schedule:
+    # 按照 Cron 表达式设定时间（注意 GitHub 用的是 UTC 时间）
+    # 比如周一到周五，每小时运行一次
+    - cron: '0 * * * 1-5'
+  workflow_dispatch: # 允许你手动点击运行测试
+
+jobs:
+  check_and_alert:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: Install dependencies
+        run: pip install yfinance
+
+      - name: Run Monitor
+        env:
+          MAIL_USER: ${{ secrets.MAIL_USER }}
+          MAIL_PASS: ${{ secrets.MAIL_PASS }}
+          RECEIVER_MAIL: ${{ secrets.RECEIVER_MAIL }}
+        run: python monitor.py
