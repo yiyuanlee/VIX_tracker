@@ -14,8 +14,8 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 
 # 持仓配置
 POSITIONS = [
-    {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 180},
-    {'symbol': 'AMD', 'shares': 2, 'alert_below': 240, 'alert_above': 150},
+    {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 350},
+    {'symbol': 'AMD', 'shares': 2, 'alert_below': 230, 'alert_above': 270},
 ]
 
 # ============== Telegram 通知 ==============
