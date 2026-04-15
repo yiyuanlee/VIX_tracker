@@ -92,6 +92,50 @@ VIX_tracker/
 ### 禁用某个通知渠道
 不填写对应的 Secrets 即可禁用该渠道。
 
+## 📁 项目结构
+
+```
+VIX_tracker/
+├── monitor.py              # VIX 监控主程序
+├── portfolio_monitor.py   # 持仓追踪程序
+├── vix_chart.png         # 生成的 VIX 图表
+├── portfolio_chart.png   # 生成的持仓图表
+├── .github/
+│   └── workflows/
+│       ├── vix_alert.yml      # VIX 监控 workflow
+│       └── portfolio_alert.yml # 持仓监控 workflow
+└── README.md
+```
+
+## 📊 持仓追踪功能
+
+### 功能
+- **每日持仓总结**：美国收盘后自动发送持仓概况（价格、盈亏、市值）
+- **价格提醒**：当股价跌破/突破预设阈值时立即通知
+- **可视化图表**：自动生成持仓走势图
+
+### 持仓配置
+在 `portfolio_monitor.py` 中修改 `POSITIONS` 列表：
+
+```python
+POSITIONS = [
+    {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 180},
+    {'symbol': 'AMD', 'shares': 2, 'alert_below': 240, 'alert_above': 150},
+]
+```
+
+### 持仓参数说明
+| 参数 | 说明 |
+|------|------|
+| `symbol` | 股票代码 |
+| `shares` | 持股数量 |
+| `alert_below` | 跌破此价格提醒（止损参考） |
+| `alert_above` | 突破此价格提醒（止盈参考） |
+
+### 运行模式
+- **daily** (默认)：发送每日持仓总结
+- **alert**：检查价格提醒，不发送日报
+
 ## 🤝 贡献
 
 欢迎提交 Issue 和 Pull Request！
