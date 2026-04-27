@@ -16,14 +16,23 @@ TELEGRAM_CHAT_ID = os.environ.get('TELEGRAM_CHAT_ID')
 # 持仓配置
 POSITIONS = [
     {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 350},
-    {'symbol': 'AMD', 'shares': 2, 'alert_below': 230, 'alert_above': 270},
+    {'symbol': 'MSFT', 'shares': 4, 'alert_below': 310, 'alert_above': 380},
+    {'symbol': 'NVDA', 'shares': 7, 'alert_below': 165, 'alert_above': 200},
+    {'symbol': 'PG', 'shares': 5, 'alert_below': 130, 'alert_above': 165},
+    {'symbol': 'BABA', 'shares': 5, 'alert_below': 95, 'alert_above': 145},
+    {'symbol': 'CRCL', 'shares': 6, 'alert_below': 85, 'alert_above': 115},
 ]
 
 # MACD 追踪标的（哪些股票需要追踪 MACD 金叉）
 MACD_TRACKED = [
     {'symbol': 'GOOGL', 'shares': 7},
-    {'symbol': 'NVDA', 'shares': 7},
     {'symbol': 'MSFT', 'shares': 4},
+    {'symbol': 'NVDA', 'shares': 7},
+    {'symbol': 'PG', 'shares': 5},
+    {'symbol': 'BABA', 'shares': 5},
+    {'symbol': 'CRCL', 'shares': 6},
+    {'symbol': 'ETH-USD', 'shares': 0.26},
+    {'symbol': 'SOL-USD', 'shares': 3},
 ]
 
 # MACD 参数
