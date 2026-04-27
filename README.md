@@ -13,6 +13,7 @@
 - **多渠道通知**：支持 Telegram、Discord、Email 三种通知方式
 - **可视化图表**：自动生成 VIX 走势图，方便快速了解市场情绪
 - **动态阈值**：支持设定固定数值或基于波动百分比触发报警
+- **MACD 金叉/死叉追踪**：自动检测持仓股的 EMA12/EMA26 交叉信号
 
 ## 🛠️ 技术栈
 
@@ -76,30 +77,11 @@
 
 ```
 VIX_tracker/
-├── monitor.py          # 主程序
-├── vix_chart.png       # 生成的图表（自动）
-├── .github/
-│   └── workflows/
-│       └── vix_alert.yml   # GitHub Actions 配置
-└── README.md
-```
-
-## ⚙️ 自定义修改
-
-### 修改阈值
-在 GitHub Secrets 中修改 `VIX_THRESHOLD` 值即可。
-
-### 禁用某个通知渠道
-不填写对应的 Secrets 即可禁用该渠道。
-
-## 📁 项目结构
-
-```
-VIX_tracker/
 ├── monitor.py              # VIX 监控主程序
-├── portfolio_monitor.py   # 持仓追踪程序
-├── vix_chart.png         # 生成的 VIX 图表
-├── portfolio_chart.png   # 生成的持仓图表
+├── portfolio_monitor.py   # 持仓追踪 + MACD 程序
+├── vix_chart.png          # 生成的 VIX 图表
+├── portfolio_chart.png    # 生成的持仓图表
+├── macd_chart.png         # 生成的 MACD 图表
 ├── .github/
 │   └── workflows/
 │       ├── vix_alert.yml      # VIX 监控 workflow
@@ -112,29 +94,75 @@ VIX_tracker/
 ### 功能
 - **每日持仓总结**：美国收盘后自动发送持仓概况（价格、盈亏、市值）
 - **价格提醒**：当股价跌破/突破预设阈值时立即通知
-- **可视化图表**：自动生成持仓走势图
+- **MACD 交叉追踪**：自动检测 EMA12/EMA26 金叉/死叉信号
+- **可视化图表**：自动生成持仓走势图 + MACD 图表
 
 ### 持仓配置
 在 `portfolio_monitor.py` 中修改 `POSITIONS` 列表：
 
 ```python
 POSITIONS = [
-    {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 180},
-    {'symbol': 'AMD', 'shares': 2, 'alert_below': 240, 'alert_above': 150},
+    {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 350},
+    {'symbol': 'AMD', 'shares': 2, 'alert_below': 230, 'alert_above': 270},
 ]
 ```
 
-### 持仓参数说明
-| 参数 | 说明 |
-|------|------|
-| `symbol` | 股票代码 |
-| `shares` | 持股数量 |
-| `alert_below` | 跌破此价格提醒（止损参考） |
-| `alert_above` | 突破此价格提醒（止盈参考） |
+### MACD 追踪配置
+在 `portfolio_monitor.py` 中修改 `MACD_TRACKED` 列表：
+
+```python
+MACD_TRACKED = [
+    {'symbol': 'GOOGL', 'shares': 7},
+    {'symbol': 'NVDA', 'shares': 7},
+    {'symbol': 'MSFT', 'shares': 4},
+]
+```
+
+### MACD 参数说明
+
+| 参数 | 默认值 | 说明 |
+|------|--------|------|
+| `MACD_FAST` | 12 | 快速 EMA 周期 |
+| `MACD_SLOW` | 26 | 慢速 EMA 周期 |
+| `MACD_SIGNAL` | 9 | 信号线 EMA 周期 |
+
+### MACD 信号说明
+
+- **MACD 金叉 📈**：EMA12 上穿 EMA26（DIF 上穿信号线 DEA），看涨信号
+- **MACD 死叉 📉**：EMA12 下穿 EMA26（DIF 下穿信号线 DEA），看跌信号
+
+每次检测到交叉会自动通过 Telegram 发送提醒，包含：
+- 股票名称和代码
+- 交叉类型（金叉/死叉）
+- 当前 MACD(DIF)、Signal(DEA)、Histogram 值
+- 持仓数量
 
 ### 运行模式
-- **daily** (默认)：发送每日持仓总结
-- **alert**：检查价格提醒，不发送日报
+
+| 模式 | 说明 |
+|------|------|
+| `daily` (默认) | 发送每日持仓总结 + 自动检查 MACD 交叉 |
+| `alert` | 仅检查价格提醒 |
+| `macd` | 仅检查 MACD 交叉信号 |
+
+在 GitHub Secrets 中设置 `PORTFOLIO_MODE` 环境变量切换模式。
+
+## ⚙️ 自定义修改
+
+### 修改阈值
+在 GitHub Secrets 中修改 `VIX_THRESHOLD` 值即可。
+
+### 禁用某个通知渠道
+不填写对应的 Secrets 即可禁用该渠道。
+
+### 调整 MACD 参数
+在 `portfolio_monitor.py` 顶部修改：
+
+```python
+MACD_FAST = 12   # 快速 EMA 周期
+MACD_SLOW = 26   # 慢速 EMA 周期
+MACD_SIGNAL = 9  # 信号线 EMA 周期
+```
 
 ## 🤝 贡献
 

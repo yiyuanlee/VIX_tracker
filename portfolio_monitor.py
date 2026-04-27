@@ -6,6 +6,7 @@ from datetime import datetime, timedelta
 import urllib.request
 import urllib.parse
 import json
+import numpy as np
 
 # ============== 配置 ==============
 # Telegram 配置
@@ -17,6 +18,19 @@ POSITIONS = [
     {'symbol': 'GOOGL', 'shares': 7, 'alert_below': 320, 'alert_above': 350},
     {'symbol': 'AMD', 'shares': 2, 'alert_below': 230, 'alert_above': 270},
 ]
+
+# MACD 追踪标的（哪些股票需要追踪 MACD 金叉）
+MACD_TRACKED = [
+    {'symbol': 'GOOGL', 'shares': 7},
+    {'symbol': 'NVDA', 'shares': 7},
+    {'symbol': 'MSFT', 'shares': 4},
+]
+
+# MACD 参数
+MACD_FAST = 12   # 快速 EMA 周期
+MACD_SLOW = 26   # 慢速 EMA 周期
+MACD_SIGNAL = 9  # 信号线 EMA 周期
+
 
 # ============== Telegram 通知 ==============
 def send_telegram(message):
@@ -42,12 +56,87 @@ def send_telegram(message):
         print(f"Telegram 发送失败: {e}")
         return False
 
+
+# ============== 工具函数 ==============
+def calculate_ema(prices, period):
+    """计算指数移动平均线 (EMA)"""
+    ema = []
+    alpha = 2 / (period + 1)
+    
+    for i, price in enumerate(prices):
+        if i == 0:
+            ema.append(price)
+        else:
+            ema.append(alpha * price + (1 - alpha) * ema[-1])
+    
+    return np.array(ema)
+
+
+def calculate_macd(prices, fast=12, slow=26, signal=9):
+    """
+    计算 MACD 指标
+    
+    返回:
+        macd_line: DIF 线 (快速EMA - 慢速EMA)
+        signal_line: DEA 信号线 (MACD 的 9 日 EMA)
+        histogram: 柱状图 (MACD线 - 信号线)
+        prev_macd_line: 上一日的 DIF 线（用于检测交叉）
+        prev_signal_line: 上一日的信号线（用于检测交叉）
+    """
+    prices = np.array(prices)
+    
+    ema_fast = calculate_ema(prices, fast)
+    ema_slow = calculate_ema(prices, slow)
+    
+    macd_line = ema_fast - ema_slow
+    signal_line = calculate_ema(macd_line, signal)
+    histogram = macd_line - signal_line
+    
+    prev_macd_line = macd_line[-2] if len(macd_line) > 1 else macd_line[-1]
+    prev_signal_line = signal_line[-2] if len(signal_line) > 1 else signal_line[-1]
+    
+    return {
+        'macd_line': macd_line[-1],
+        'signal_line': signal_line[-1],
+        'histogram': histogram[-1],
+        'prev_macd_line': prev_macd_line,
+        'prev_signal_line': prev_signal_line,
+        'all_macd': macd_line,
+        'all_signal': signal_line,
+        'all_histogram': histogram,
+    }
+
+
+def detect_macd_cross(macd_data):
+    """
+    检测 MACD 交叉信号
+    
+    返回:
+        'golden_cross': EMA12 上穿 EMA26（DIF 从下方穿越信号线，看涨）
+        'death_cross':  EMA12 下穿 EMA26（DIF 从上方穿越信号线，看跌）
+        None: 无交叉
+    """
+    macd = macd_data['macd_line']
+    signal = macd_data['signal_line']
+    prev_macd = macd_data['prev_macd_line']
+    prev_signal = macd_data['prev_signal_line']
+    
+    # 金叉：前一天 DIF <= 信号线，今天 DIF > 信号线
+    if prev_macd <= prev_signal and macd > signal:
+        return 'golden_cross'
+    # 死叉：前一天 DIF >= 信号线，今天 DIF < 信号线
+    elif prev_macd >= prev_signal and macd < signal:
+        return 'death_cross'
+    
+    return None
+
+
 # ============== 获取股票数据 ==============
-def get_stock_data(symbol):
+def get_stock_data(symbol, period='1mo'):
     """获取股票数据"""
     try:
         ticker = yf.Ticker(symbol)
-        hist = ticker.history(period="5d")
+        hist = ticker.history(period=period)
         
         if len(hist) == 0:
             return None
@@ -56,7 +145,6 @@ def get_stock_data(symbol):
         prev_close = hist['Close'].iloc[-2] if len(hist) > 1 else current_price
         change_percent = ((current_price - prev_close) / prev_close) * 100
         
-        # 获取更多信息
         info = ticker.info
         company_name = info.get('shortName', symbol)
         
@@ -67,11 +155,11 @@ def get_stock_data(symbol):
             'prev_close': prev_close,
             'change_percent': change_percent,
             'hist': hist,
-            'shares': None  # 稍后填充
         }
     except Exception as e:
         print(f"获取 {symbol} 数据失败: {e}")
         return None
+
 
 # ============== 生成持仓图表 ==============
 def generate_portfolio_chart(positions_data, output_path='portfolio_chart.png'):
@@ -85,7 +173,6 @@ def generate_portfolio_chart(positions_data, output_path='portfolio_chart.png'):
     
     colors = ['#FF6B6B' if c < 0 else '#4ECDC4' for c in changes]
     
-    # 上图：当前价格
     ax1 = axes[0]
     bars = ax1.bar(symbols, prices, color=colors, edgecolor='white', linewidth=1.5)
     ax1.set_ylabel('Stock Price ($)', fontsize=12)
@@ -97,7 +184,6 @@ def generate_portfolio_chart(positions_data, output_path='portfolio_chart.png'):
                 f'{emoji} ${price:.2f}\n({change:+.2f}%)', 
                 ha='center', va='bottom', fontsize=10)
     
-    # 下图：5日走势图
     ax2 = axes[1]
     for p in positions_data:
         df = p['hist']
@@ -106,7 +192,7 @@ def generate_portfolio_chart(positions_data, output_path='portfolio_chart.png'):
     
     ax2.set_xlabel('Date', fontsize=12)
     ax2.set_ylabel('Stock Price ($)', fontsize=12)
-    ax2.set_title('5-Day Price Trend', fontsize=14)
+    ax2.set_title('Price Trend', fontsize=14)
     ax2.legend(loc='upper left')
     ax2.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
     ax2.grid(True, alpha=0.3)
@@ -116,6 +202,61 @@ def generate_portfolio_chart(positions_data, output_path='portfolio_chart.png'):
     plt.close()
     
     return output_path
+
+
+def generate_macd_chart(positions_data, macd_results, output_path='macd_chart.png'):
+    """生成 MACD 图表"""
+    fig, axes = plt.subplots(len(positions_data), 2, figsize=(14, 4 * len(positions_data)))
+    if len(positions_data) == 1:
+        axes = axes.reshape(1, -1)
+    
+    for idx, p in enumerate(positions_data):
+        symbol = p['symbol']
+        if symbol not in macd_results:
+            continue
+        
+        macd_data = macd_results[symbol]
+        df = p['hist']
+        prices = df['Close'].values
+        
+        # 左图：价格 + EMA
+        ax_price = axes[idx, 0]
+        ax_price.plot(df.index, prices, label=f'{symbol} price', color='#333333', linewidth=2)
+        
+        ema12 = calculate_ema(prices, MACD_FAST)
+        ema26 = calculate_ema(prices, MACD_SLOW)
+        ax_price.plot(df.index[-len(ema12):], ema12, label=f'EMA12', color='#2196F3', linewidth=1.5, alpha=0.8)
+        ax_price.plot(df.index[-len(ema26):], ema26, label=f'EMA26', color='#FF9800', linewidth=1.5, alpha=0.8)
+        ax_price.set_title(f'{symbol} - Price & EMA', fontsize=12, fontweight='bold')
+        ax_price.legend(loc='upper left', fontsize=9)
+        ax_price.grid(True, alpha=0.3)
+        ax_price.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
+        
+        # 右图：MACD
+        ax_macd = axes[idx, 1]
+        all_macd = macd_data['all_macd']
+        all_signal = macd_data['all_signal']
+        all_hist = macd_data['all_histogram']
+        
+        start_idx = max(0, len(prices) - len(all_macd))
+        x = df.index[start_idx:]
+        
+        ax_macd.plot(x, all_macd, label='MACD (DIF)', color='#2196F3', linewidth=2)
+        ax_macd.plot(x, all_signal, label='Signal (DEA)', color='#FF9800', linewidth=2)
+        
+        colors = ['#4CAF50' if v >= 0 else '#F44336' for v in all_hist]
+        ax_macd.bar(x, all_hist, label='Histogram', color=colors, alpha=0.6, width=0.8)
+        ax_macd.axhline(y=0, color='#888888', linewidth=1)
+        ax_macd.set_title(f'{symbol} - MACD', fontsize=12, fontweight='bold')
+        ax_macd.legend(loc='upper left', fontsize=9)
+        ax_macd.grid(True, alpha=0.3)
+        ax_macd.xaxis.set_major_formatter(mdates.DateFormatter('%m/%d'))
+    
+    plt.tight_layout()
+    plt.savefig(output_path, dpi=150, bbox_inches='tight', facecolor='white')
+    plt.close()
+    return output_path
+
 
 # ============== 格式化消息 ==============
 def format_price_alert(position, current_price):
@@ -134,6 +275,38 @@ def format_price_alert(position, current_price):
 市值: ${current_price * position['shares']:.2f}
 """
     return message.strip()
+
+
+def format_macd_cross_alert(symbol, company_name, cross_type, shares, macd_data):
+    """格式化 MACD 交叉提醒"""
+    is_golden = cross_type == 'golden_cross'
+    emoji = "🟢" if is_golden else "🔴"
+    cross_name = "金叉 📈" if is_golden else "死叉 📉"
+    
+    macd_val = macd_data['macd_line']
+    signal_val = macd_data['signal_line']
+    hist_val = macd_data['histogram']
+    
+    direction_desc = "EMA12 上穿 EMA26，看涨信号！" if is_golden else "EMA12 下穿 EMA26，看跌信号！"
+    
+    message = f"""
+{emoji} <b>MACD {cross_name}</b>
+
+{company_name} ({symbol})
+
+{cross_type == 'golden_cross' and '🔥 出现 MACD 金叉 — 关注买入机会'}
+{cross_type == 'death_cross' and '⚠️ 出现 MACD 死叉 — 注意风险'}
+
+MACD(DIF):  {macd_val:+.4f}
+Signal(DEA): {signal_val:+.4f}
+Histogram:  {hist_val:+.4f}
+
+{direction_desc}
+
+持仓: {shares}股
+"""
+    return message.strip()
+
 
 def format_daily_summary(positions_data, total_value, total_change, total_change_percent):
     """格式化每日收盘总结"""
@@ -168,8 +341,9 @@ def format_daily_summary(positions_data, total_value, total_change, total_change
     
     return "\n".join(lines)
 
+
 # ============== 主逻辑 ==============
-def check_alerts():
+def check_price_alerts():
     """检查是否触发价格提醒"""
     alerts_triggered = []
     
@@ -180,7 +354,6 @@ def check_alerts():
         
         data['shares'] = position['shares']
         
-        # 检查是否触发提醒
         if position['alert_below'] and data['current_price'] < position['alert_below']:
             alerts_triggered.append({
                 'type': 'below',
@@ -197,8 +370,38 @@ def check_alerts():
     
     return alerts_triggered
 
+
+def check_macd_crosses():
+    """检查 MACD 交叉信号"""
+    crosses = []
+    
+    for item in MACD_TRACKED:
+        symbol = item['symbol']
+        data = get_stock_data(symbol, period='3mo')
+        
+        if data is None or len(data['hist']) < MACD_SLOW + MACD_SIGNAL:
+            print(f"⚠️ {symbol} 数据不足，跳过 MACD 计算")
+            continue
+        
+        prices = data['hist']['Close'].values
+        macd_data = calculate_macd(prices, MACD_FAST, MACD_SLOW, MACD_SIGNAL)
+        cross = detect_macd_cross(macd_data)
+        
+        if cross:
+            crosses.append({
+                'symbol': symbol,
+                'name': data['name'],
+                'cross_type': cross,
+                'shares': item['shares'],
+                'macd_data': macd_data,
+                'current_price': data['current_price'],
+            })
+    
+    return crosses
+
+
 def send_daily_summary():
-    """发送每日持仓总结"""
+    """发送每日持仓总结 + MACD 交叉检查"""
     positions_data = []
     total_value = 0
     total_prev_value = 0
@@ -221,7 +424,6 @@ def send_daily_summary():
     total_change = total_value - total_prev_value
     total_change_percent = ((total_value - total_prev_value) / total_prev_value) * 100
     
-    # 生成图表
     chart_path = 'portfolio_chart.png'
     try:
         generate_portfolio_chart(positions_data, chart_path)
@@ -230,22 +432,35 @@ def send_daily_summary():
         print(f"⚠️ 图表生成失败: {e}")
         chart_path = None
     
-    # 发送消息
     message = format_daily_summary(positions_data, total_value, total_change, total_change_percent)
     send_telegram(message)
+    
+    # 检查 MACD 交叉
+    macd_crosses = check_macd_crosses()
+    if macd_crosses:
+        print(f"\n🔔 检测到 {len(macd_crosses)} 个 MACD 交叉信号:")
+        for cross in macd_crosses:
+            print(f"  {cross['symbol']} - {cross['cross_type']}")
+            msg = format_macd_cross_alert(
+                cross['symbol'],
+                cross['name'],
+                cross['cross_type'],
+                cross['shares'],
+                cross['macd_data'],
+            )
+            send_telegram(msg)
     
     print(f"\n📊 每日总结已发送")
     print(f"总市值: ${total_value:,.2f} ({total_change_percent:+.2f}%)")
 
+
 if __name__ == "__main__":
     print(f"[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] Portfolio Monitor 启动...")
     
-    # 模式选择：通过环境变量控制
     mode = os.environ.get('PORTFOLIO_MODE', 'daily')
     
     if mode == 'alert':
-        # 价格提醒模式
-        alerts = check_alerts()
+        alerts = check_price_alerts()
         if alerts:
             for alert in alerts:
                 message = format_price_alert(
@@ -256,6 +471,22 @@ if __name__ == "__main__":
             print(f"✅ 已发送 {len(alerts)} 条价格提醒")
         else:
             print("🟢 未触发价格提醒")
+    
+    elif mode == 'macd':
+        crosses = check_macd_crosses()
+        if crosses:
+            for cross in crosses:
+                msg = format_macd_cross_alert(
+                    cross['symbol'],
+                    cross['name'],
+                    cross['cross_type'],
+                    cross['shares'],
+                    cross['macd_data'],
+                )
+                send_telegram(msg)
+            print(f"✅ 已发送 {len(crosses)} 条 MACD 提醒")
+        else:
+            print("🟢 今日无 MACD 交叉信号")
+    
     else:
-        # 每日总结模式
         send_daily_summary()
