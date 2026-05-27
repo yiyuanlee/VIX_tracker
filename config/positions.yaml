@@ -1,0 +1,64 @@
+# Portfolio Positions Configuration
+# Edit this file to add/remove tracked positions
+
+positions:
+  - symbol: GOOGL
+    shares: 7
+    alert_below: 320
+    alert_above: 350
+
+  - symbol: MSFT
+    shares: 4
+    alert_below: 310
+    alert_above: 380
+
+  - symbol: NVDA
+    shares: 7
+    alert_below: 165
+    alert_above: 200
+
+  - symbol: PG
+    shares: 5
+    alert_below: 130
+    alert_above: 165
+
+  - symbol: BABA
+    shares: 5
+    alert_below: 95
+    alert_above: 145
+
+  - symbol: CRCL
+    shares: 6
+    alert_below: 85
+    alert_above: 115
+
+# Stocks/Crypto to track for MACD crossovers
+macd_tracked:
+  - symbol: GOOGL
+    shares: 7
+
+  - symbol: MSFT
+    shares: 4
+
+  - symbol: NVDA
+    shares: 7
+
+  - symbol: PG
+    shares: 5
+
+  - symbol: BABA
+    shares: 5
+
+  - symbol: CRCL
+    shares: 6
+
+  - symbol: ETH-USD
+    shares: 0.26
+
+  - symbol: SOL-USD
+    shares: 3
+
+# MACD Parameters
+macd_fast: 12
+macd_slow: 26
+macd_signal: 9
